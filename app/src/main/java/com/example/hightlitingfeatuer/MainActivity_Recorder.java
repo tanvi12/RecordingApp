@@ -559,10 +559,10 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
                 currentFile = new File(getExternalFilesDir(null),
                         "recording" + System.currentTimeMillis() + ".wav");
 
-//                recorder = OmRecorder.wav(
-//                        new PullTransport.Default(Util.getMic(AudioSource.MIC, AudioChannel.STEREO, AudioSampleRate.HZ_48000), MainActivity_Recorder.this),
-//                        currentFile);
-//                recorder.startRecording();
+                recorder = OmRecorder.wav(
+                        new PullTransport.Default(Util.getMic(AudioSource.MIC, AudioChannel.STEREO, AudioSampleRate.HZ_48000), MainActivity_Recorder.this),
+                        currentFile);
+                recorder.startRecording();
             }
         } catch (IOException e) {
             e.printStackTrace();
