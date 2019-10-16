@@ -66,4 +66,8 @@ public class VisualizerView extends View {
         }
     }
 
+    public void setColor(int color){
+        linePaint.setColor(color);
+    }
+
 }
