@@ -16,8 +16,6 @@
 
 package com.example.hightlitingfeatuer;
 
-import com.example.recordapplication.CheapMP3;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.security.MessageDigest;

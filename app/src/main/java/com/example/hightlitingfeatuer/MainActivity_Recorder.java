@@ -30,54 +30,32 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 
-import com.example.hightlitingfeatuer.AndroidAudioConverter;
-import com.example.hightlitingfeatuer.R;
-import com.example.hightlitingfeatuer.Util;
-import com.example.hightlitingfeatuer.UtilSave;
 import com.example.hightlitingfeatuer.callback.IConvertCallback;
-import com.tyorikan.voicerecordingvisualizer.RecordingSampler;
-import com.tyorikan.voicerecordingvisualizer.VisualizerView;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
-
 import cafe.adriel.androidaudiorecorder.model.AudioChannel;
 import cafe.adriel.androidaudiorecorder.model.AudioSampleRate;
 import cafe.adriel.androidaudiorecorder.model.AudioSource;
-import dmax.dialog.SpotsDialog;
 import omrecorder.AudioChunk;
 import omrecorder.OmRecorder;
 import omrecorder.PullTransport;
 import omrecorder.Recorder;
 
-public class MainActivity_Recorder extends AppCompatActivity implements PullTransport.OnAudioChunkPulledListener, RecordingSampler.CalculateVolumeListener {
+
+
+public class MainActivity_Recorder extends AppCompatActivity implements PullTransport.OnAudioChunkPulledListener {
     String currentDateTime;
     private static final int RECORDER_SAMPLERATE = 8000;
     private static final int RECORDER_CHANNELS = AudioFormat.CHANNEL_IN_MONO;
     private static final int RECORDER_AUDIO_ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 
-    private Thread recordingThread = null;
     private boolean isRecording = false;
     private boolean isStarted = false;
     private Recorder recorder;
     private boolean shouldDeleteLastFile = false;
-    private TextView console;
     private Handler handler;
     int seconds;
     int startSeconds;
@@ -86,11 +64,9 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
     int SECOONDSTORECORDBEFORE = 10;
     ImageView audiobar;
     View someView;
-    RecordingSampler recordingSampler;
     VisualizerView visualizerView;
-    int flag = 0;
-    SpotsDialog dialog;
 
+    private MediaRecorder tempRecorder = null;
     @Override
     protected void onStart() {
         super.onStart();
@@ -112,29 +88,7 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
         someView = findViewById(R.id.the_id);
         visualizerView = (VisualizerView) findViewById(R.id.visualizer);
 
-        recordingSampler = new RecordingSampler();
-        recordingSampler.setVolumeListener(MainActivity_Recorder.this);  // for custom implements
-        recordingSampler.setSamplingInterval(100); // voice sampling interval
-        recordingSampler.link(visualizerView);     // link to visualizer
-//        recordingSampler.startRecording();
 
-
-        //
-//         mRealtimeWaveformView = findViewById(R.id.waveformView);
-//         mRecordingThread = new RecordingThread(new AudioDataReceivedListener() {
-//             @Override
-//             public void onAudioDataReceived(short[] data) {
-////
-//                 try {
-//                     mRealtimeWaveformView.setSamples(data);
-//                 } catch (Exception ee) {
-//
-//                 }
-//             }
-//         });
-//
-//
-//         mRecordingThread.startRecording();
 
         handler = new Handler();
         setButtonHandlers();
@@ -163,124 +117,9 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
 
     int bufferSize = 1024 * 2; // want to play 2048 (2K) since 2 bytes we use only 1024
 
-
-    //convert short to byte
-    private byte[] short2byte(short[] sData) {
-        int shortArrsize = sData.length;
-        byte[] bytes = new byte[shortArrsize * 2];
-        for (int i = 0; i < shortArrsize; i++) {
-            bytes[i * 2] = (byte) (sData[i] & 0x00FF);
-            bytes[(i * 2) + 1] = (byte) (sData[i] >> 8);
-            sData[i] = 0;
-        }
-        return bytes;
-
-    }
-
-    private void rawToWave(final File rawFile, final File waveFile) throws IOException {
-
-        byte[] rawData = new byte[(int) rawFile.length()];
-        DataInputStream input = null;
-        try {
-            input = new DataInputStream(new FileInputStream(rawFile));
-            input.read(rawData);
-        } finally {
-            if (input != null) {
-                input.close();
-            }
-        }
-
-        DataOutputStream output = null;
-        try {
-            output = new DataOutputStream(new FileOutputStream(waveFile));
-            // WAVE header
-            // see http://ccrma.stanford.edu/courses/422/projects/WaveFormat/
-            writeString(output, "RIFF"); // chunk id
-            writeInt(output, 36 + rawData.length); // chunk size
-            writeString(output, "WAVE"); // format
-            writeString(output, "fmt "); // subchunk 1 id
-            writeInt(output, 16); // subchunk 1 size
-            writeShort(output, (short) 1); // audio format (1 = PCM)
-            writeShort(output, (short) 1); // number of channels
-            writeInt(output, 8000); // sample rate
-            writeInt(output, RECORDER_SAMPLERATE * 2); // byte rate
-            writeShort(output, (short) 2); // block align
-            writeShort(output, (short) 16); // bits per sample
-            writeString(output, "data"); // subchunk 2 id
-            writeInt(output, rawData.length); // subchunk 2 size
-            // Audio data (conversion big endian -> little endian)
-            short[] shorts = new short[rawData.length / 2];
-            ByteBuffer.wrap(rawData).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts);
-            ByteBuffer bytes = ByteBuffer.allocate(shorts.length * 2);
-            for (short s : shorts) {
-                bytes.putShort(s);
-            }
-
-            output.write(fullyReadFileToBytes(rawFile));
-        } finally {
-            if (output != null) {
-                output.close();
-            }
-        }
-    }
-
-    byte[] fullyReadFileToBytes(File f) throws IOException {
-        int size = (int) f.length();
-        byte bytes[] = new byte[size];
-        byte tmpBuff[] = new byte[size];
-        FileInputStream fis = new FileInputStream(f);
-        try {
-
-            int read = fis.read(bytes, 0, size);
-            if (read < size) {
-                int remain = size - read;
-                while (remain > 0) {
-                    read = fis.read(tmpBuff, 0, remain);
-                    System.arraycopy(tmpBuff, 0, bytes, size - remain, read);
-                    remain -= read;
-                }
-            }
-        } catch (IOException e) {
-            throw e;
-        } finally {
-            fis.close();
-        }
-
-        return bytes;
-    }
-
-    private void writeInt(final DataOutputStream output, final int value) throws IOException {
-        output.write(value >> 0);
-        output.write(value >> 8);
-        output.write(value >> 16);
-        output.write(value >> 24);
-    }
-
-    private void writeShort(final DataOutputStream output, final short value) throws IOException {
-        output.write(value >> 0);
-        output.write(value >> 8);
-    }
-
-    private void writeString(final DataOutputStream output, final String value) throws IOException {
-        for (int i = 0; i < value.length(); i++) {
-            output.write(value.charAt(i));
-        }
-    }
-
-
-    ArrayList<Integer> readedBytes = new ArrayList<>();
     File currentFile;
-    boolean isBytesCleaning;
+    File tempFile;
 
-    private void cutTo10Seconds() {
-        isBytesCleaning = true;
-
-        if (readedBytes.size() - 1 - RECORDER_SAMPLERATE * 10 > 0) {
-            readedBytes = new ArrayList<>(readedBytes
-                    .subList(readedBytes.size() - 1 - RECORDER_SAMPLERATE * 10, readedBytes.size() - 1));
-        }
-        isBytesCleaning = false;
-    }
 
 
     private void stopRecording() {
@@ -290,13 +129,9 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
             isStarted = false;
             recorder.stopRecording();
             recorder = null;
-            recordingThread = null;
-
+            visualizerView.clear();
+            recorder = null;
         }
-
-//        mediaRecorder.stop();
-//        mediaRecorder.release();
-//        mediaRecorder = null;
     }
 
     private View.OnClickListener btnClick = new View.OnClickListener() {
@@ -316,6 +151,7 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
                                 new PullTransport.Default(Util.getMic(AudioSource.MIC, AudioChannel.STEREO, AudioSampleRate.HZ_8000), MainActivity_Recorder.this),
                                 currentFile);
                         recorder.startRecording();
+
 
                         handler.postDelayed(new Runnable() {
                             @Override
@@ -340,9 +176,6 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
                                 toast1.setGravity(Gravity.CENTER_HORIZONTAL, 0, 90);
                                 toast1.show();
 
-
-//                                console.setText(console.getText() + "\n Listening started: " + timeText());
-//                                ((Button) v).setText("Start Recording");
                             }
                         });
                     } else {
@@ -350,8 +183,6 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
                             new AsyncTask<Void, Void, Void>() {
                                 @Override
                                 protected void onPreExecute() {
-                                    dialog = new SpotsDialog(MainActivity_Recorder.this);
-                                    dialog.show();
                                     super.onPreExecute();
                                 }
 
@@ -369,7 +200,7 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
                                 @Override
                                 protected void onPostExecute(Void aVoid) {
                                     super.onPostExecute(aVoid);
-                                    dialog.dismiss();
+
 
                                     TextView taptohighlit = findViewById(R.id.taptohighlit);
 
@@ -405,13 +236,6 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
             if (isRecording) {
                 shouldDeleteLastFile = isStarted;
                 if (isStarted) {
-//                    Thread savingThread = new Thread(new Runnable() {
-//                        public void run() {
-//                            saveToFile();
-//                        }
-//                    });
-//                    savingThread.start();
-//
                     isStarted = false;
                     handler.post(new Runnable() {
                         @Override
@@ -443,8 +267,6 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
                 new AsyncTask<Void, Void, Void>() {
                     @Override
                     protected void onPreExecute() {
-                        dialog = new SpotsDialog(MainActivity_Recorder.this);
-                        dialog.show();
                         super.onPreExecute();
                     }
 
@@ -461,8 +283,6 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
                     @Override
                     protected void onPostExecute(Void aVoid) {
                         super.onPostExecute(aVoid);
-                        dialog.dismiss();
-
 
                     }
                 }.execute();
@@ -516,7 +336,9 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
             cheapSoundFile.WriteFile(file1, startFrame, endFrame - startFrame);
             currentFile.delete();
 
-            if (shouldDeleteLastFile == false) {
+
+
+            if (!shouldDeleteLastFile) {
                 file1.delete();
             }
 
@@ -563,15 +385,13 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
                         new PullTransport.Default(Util.getMic(AudioSource.MIC, AudioChannel.STEREO, AudioSampleRate.HZ_48000), MainActivity_Recorder.this),
                         currentFile);
                 recorder.startRecording();
+
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private String timeText() {
-        return new SimpleDateFormat("hh:mm:ss").format(System.currentTimeMillis());
-    }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
@@ -610,12 +430,9 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
 
 
     @Override
-    public void onAudioChunkPulled(AudioChunk audioChunk) {
-
-    }
-
-    @Override
-    public void onCalculateVolume(int volume) {
+    public void onAudioChunkPulled(final AudioChunk audioChunk) {
+        visualizerView.addAmplitude((float) Math.pow(10,audioChunk.maxAmplitude()/20)); // update the VisualizeView
+        visualizerView.invalidate(); // refresh the VisualizerView
 
     }
 
@@ -640,6 +457,17 @@ public class MainActivity_Recorder extends AppCompatActivity implements PullTran
 
     }
 
+
+
+    private void audioSetup() {
+        tempFile = new File(getExternalFilesDir(null),
+                "recording" + System.currentTimeMillis() + ".wav");
+        tempRecorder = new MediaRecorder();
+        tempRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+        tempRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_2_TS);
+        tempRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+        tempRecorder.setOutputFile(tempFile.getPath());
+    }
     @Override
     public void onBackPressed() {
         Intent i = new Intent(MainActivity_Recorder.this, MainActivity_Recorder.class);
